@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Nam GĐ",
+    "email": "nam@example.com",
+    "phone": "0912345678",
+    "role": "Director"
+  },
+  {
+    "name": "Hằng HR",
+    "email": "hang@example.com",
+    "phone": "0987654321",
+    "role": "HR Manager"
+  },
+  {
+    "name": "Bình Dev",
+    "email": "binh@example.com",
+    "phone": "0909090909",
+    "role": "Developer"
+  }
+]

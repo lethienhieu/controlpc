@@ -1,0 +1,98 @@
+{
+  "file_permissions": {
+    "allowed_read_dirs": [
+      "C:\\1 CODE\\CONTROLPC\\workspace\\input",
+      "C:\\1 CODE\\CONTROLPC\\workspace\\output",
+      "C:\\Users\\admin\\Desktop",
+      "C:\\Users\\admin\\Documents",
+      "C:\\Users\\admin\\Downloads"
+    ],
+    "allowed_write_dirs": [
+      "C:\\1 CODE\\CONTROLPC\\workspace\\output",
+      "C:\\1 CODE\\CONTROLPC\\workspace\\temp",
+      "C:\\Users\\admin\\Desktop",
+      "C:\\Users\\admin\\Documents"
+    ],
+    "blocked_dirs": [
+      "C:\\Windows",
+      "C:\\Program Files",
+      "C:\\Program Files (x86)",
+      "C:\\Users\\admin\\AppData",
+      "C:\\Users\\admin\\.gemini"
+    ],
+    "allowed_extensions": [
+      ".docx",
+      ".xlsx",
+      ".pdf",
+      ".txt",
+      ".png",
+      ".jpg",
+      ".csv",
+      ".json"
+    ],
+    "max_attachment_mb": 15
+  },
+  "app_permissions": {
+    "cmd": {
+      "launch": "confirm",
+      "allowed_commands": [
+        "dir",
+        "where",
+        "start",
+        "python --version"
+      ]
+    },
+    "powershell": {
+      "launch": "confirm",
+      "allowed_commands": [
+        "Get-Process"
+      ]
+    },
+    "notepad": {
+      "launch": "allow"
+    },
+    "explorer": {
+      "launch": "allow"
+    },
+    "excel": {
+      "launch": "allow"
+    },
+    "word": {
+      "launch": "allow"
+    }
+  },
+  "contact_permissions": {
+    "nam@example.com": {
+      "name": "Nam GĐ",
+      "policy": "confirm_before_send"
+    },
+    "hang@example.com": {
+      "name": "Hằng HR",
+      "policy": "draft_only"
+    },
+    "default": {
+      "policy": "confirm_before_send"
+    }
+  },
+  "remote_sender_permissions": {
+    "telegram:123456789": {
+      "name": "Owner",
+      "enabled": true,
+      "auth_level": "admin",
+      "can_create_task": true,
+      "can_approve_high_risk": true,
+      "requires_pin_for_high_risk": true
+    },
+    "default": {
+      "enabled": false,
+      "auth_level": "none"
+    }
+  },
+  "safety_settings": {
+    "coordinate_click_enabled": false,
+    "remote_gateway_enabled": false,
+    "auto_send_messages": false,
+    "default_action_policy": "confirm_once",
+    "test_flag": "hello_world"
+  }
+}

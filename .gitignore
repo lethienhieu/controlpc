@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.toast
+.cache
+.pytest_cache/
+.coverage
+htmlcov/
+.spyderproject
+.settings
+.vscode/
+.idea/
+
+# SQLite Database / Runtime data
+backend/app/database/*.db
+backend/app/database/*.json
+!backend/app/database/knowledge_base.json
+backend/app/temp/
+backend/temp/
+workspace/temp/
+workspace/output/
+workspace/input/
+*.log
+
+# Node.js / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+
+# Windows OS metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

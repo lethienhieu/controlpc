@@ -1,0 +1,7 @@
+{
+  "smtp_host": "smtp.example.com",
+  "smtp_port": 587,
+  "smtp_user": "controlpc@example.com",
+  "from_email": "controlpc@example.com",
+  "safety_mode": "mock"
+}

@@ -1,0 +1,7 @@
+{
+  "telegram_enabled": true,
+  "zalo_enabled": false,
+  "whatsapp_enabled": false,
+  "default_messaging_policy": "draft_only",
+  "safety_mode": "mock"
+}
