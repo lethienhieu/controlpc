@@ -72,20 +72,26 @@ class ReActPlanner:
             config = load_permissions()
             allowed_read = config.get("file_permissions", {}).get("allowed_read_dirs", [])
             recent_files = []
-            for d in allowed_read:
+            for d in allowed_read[:2]:  # Max 2 dirs to keep observation small
                 if os.path.exists(d):
                     try:
                         files = [os.path.join(d, f) for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
-                        recent_files.extend(files[:5])
+                        recent_files.extend(files[:3])
                     except:
                         pass
                         
-            action_history = [l['message'] for l in history_logs[-5:] if l['type'] == 'action']
+            # Trim history: only last 3 action logs, truncate long messages
+            action_history = []
+            for l in history_logs[-5:]:
+                if l['type'] in ('action', 'system', 'reasoning'):
+                    msg = l['message'][:120]  # Cap at 120 chars to reduce tokens
+                    action_history.append(msg)
+            action_history = action_history[-3:]  # Only last 3
             
             obs_dict = {
-                "active_windows": [{"title": w["title"], "pid": w["pid"]} for w in active_windows[:5]],
-                "focused_window_controls": focused_controls,
-                "recent_files": recent_files[:5],
+                "active_windows": [{"title": w["title"][:60]} for w in active_windows[:3]],
+                "focused_controls": focused_controls[:5],
+                "recent_files": recent_files[:3],
                 "action_history": action_history
             }
             

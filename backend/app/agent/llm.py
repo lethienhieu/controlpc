@@ -1,5 +1,6 @@
 import os
 import logging
+import multiprocessing
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger("llm")
@@ -11,6 +12,9 @@ try:
 except ImportError:
     LLAMA_AVAILABLE = False
     logger.warning("llama-cpp-python is not installed or available.")
+
+# Auto-detect optimal thread count (use all physical cores)
+_CPU_CORES = max(4, multiprocessing.cpu_count())
 
 class LocalLLM:
     def __init__(self):
@@ -43,17 +47,18 @@ class LocalLLM:
             return False
             
         try:
-            logger.info(f"Loading local GGUF model: {self.model_path}...")
-            # Initialize with GPU offloading if available (n_gpu_layers=-1 tries to offload all layers, or 0 for CPU)
-            # Default threads to 4 for balanced background usage
+            logger.info(f"Loading local GGUF model: {self.model_path} (threads={_CPU_CORES})...")
             self.model = Llama(
                 model_path=self.model_path,
-                n_ctx=2048,
-                n_threads=4,
-                n_gpu_layers=0,  # Run on CPU by default for stability, user can adjust in settings
+                n_ctx=1024,        # Reduced context: enough for ReAct steps, faster KV-cache
+                n_threads=_CPU_CORES,  # Use all available CPU cores
+                n_batch=512,       # Larger prompt batch → faster prefill
+                n_gpu_layers=0,    # CPU-only; set to -1 if you have compatible GPU
+                use_mmap=True,     # Memory-map model file → faster cold load
+                use_mlock=False,   # Don't pin RAM; let OS manage
                 verbose=False
             )
-            logger.info("Local LLM model loaded successfully.")
+            logger.info(f"Local LLM loaded OK (threads={_CPU_CORES}, ctx=1024, batch=512).")
             return True
         except Exception as e:
             logger.error(f"Failed to load model: {e}")

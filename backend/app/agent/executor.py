@@ -33,6 +33,7 @@ class AgentExecutor:
         self.policy = ActionPolicy()
         self.classifier = IntentClassifier(self.llm)
         self.planner = ReActPlanner(self.llm)
+        self._discovery_cache: Dict[str, str] = {}  # Cache Start Menu scan results
 
         # Preloaded mock databases to support quick testing
         self.mock_steps_database = {
@@ -141,10 +142,7 @@ class AgentExecutor:
 
             self.add_log("system", f"Đang phân tích bước {self.current_step}...", "info")
             
-            # Capture screen
-            screenshot_data = os_control.capture_screenshot()
-            
-            # Plan decision
+            # Plan decision (skip screenshot to save time; only capture when needed for click actions)
             decision = self.plan_action()
             if not decision:
                 self.status = "error"
@@ -204,8 +202,7 @@ class AgentExecutor:
                         logger.error(f"Failed to send remote notification: {ex}")
                 return {
                     "status": self.status,
-                    "pending_action": self.pending_action,
-                    "screenshot": screenshot_data.get("base64")
+                    "pending_action": self.pending_action
                 }
             else:
                 return self.execute_pending_action()
@@ -299,19 +296,26 @@ class AgentExecutor:
                     # 1. Search knowledge base
                     exe_path = memory.get_app_path(app_name)
                     
-                    # 2. If not found, run dynamic Start Menu scanner
+                    # 2. If not found, use cached scan or run new Start Menu scan
                     if not exe_path:
-                        self.add_log("system", f"Đường dẫn '{app_name}' chưa có trong bộ nhớ. Đang quét Start Menu...", "info")
-                        scanned = discovery.scan_start_menu()
-                        match = discovery.find_best_app_match(app_name, scanned)
-                        if match:
-                            matched_key, exe_path = match
-                            self.add_log(
-                                "system",
-                                f"Phát hiện app: '{matched_key}' -> '{exe_path}'. Lưu theo tên '{app_name}'.",
-                                "info",
-                            )
-                            memory.save_app_path(app_name, exe_path)
+                        # Check cache first to avoid repeated slow scans
+                        cache_key = app_name.lower().strip()
+                        if cache_key in self._discovery_cache:
+                            exe_path = self._discovery_cache[cache_key]
+                            self.add_log("system", f"Tìm thấy trong cache: '{app_name}' -> '{exe_path}'", "info")
+                        else:
+                            self.add_log("system", f"Đường dẫn '{app_name}' chưa có. Đang quét Start Menu...", "info")
+                            scanned = discovery.scan_start_menu()
+                            match = discovery.find_best_app_match(app_name, scanned)
+                            if match:
+                                matched_key, exe_path = match
+                                self._discovery_cache[cache_key] = exe_path
+                                self.add_log(
+                                    "system",
+                                    f"Phát hiện app: '{matched_key}' -> '{exe_path}'. Lưu theo tên '{app_name}'.",
+                                    "info",
+                                )
+                                memory.save_app_path(app_name, exe_path)
     
                     # 3. Launch file/app directly
                     if exe_path:
@@ -359,7 +363,7 @@ class AgentExecutor:
                 if action_id:
                     memory.update_audit_log_status(action_id, "completed")
                 self.pending_action = None
-                time.sleep(1.0)
+                time.sleep(0.3)  # Giảm từ 1.0s → 0.3s: đủ để OS phản hồi, không gây delay cảm nhận
                 return self.next_step()
             else:
                 self.status = "error"
