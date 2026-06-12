@@ -85,9 +85,9 @@ def run_real_polling(token):
                     })
                     
                     if api_res.status_code == 200:
-                        reply = api_res.json().get("message", "Tác vụ đã được ghi nhận.")
+                        reply = api_res.json().get("message", "Task has been recorded.")
                     else:
-                        reply = f"Lỗi liên kết Backend: {api_res.text}"
+                        reply = f"Backend connection error: {api_res.text}"
                         
                     # Reply back via TG
                     requests.post(f"{url}/sendMessage", json={"chat_id": chat_id, "text": reply})

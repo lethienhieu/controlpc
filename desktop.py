@@ -37,14 +37,18 @@ def perform_health_check():
     except ImportError:
         print("  - win32gui/pywinauto (UIA): NOT INSTALLED (UIA fallback disabled)")
 
-    # 2. Check Model
-    print("[CHECK] Gemma-4 GGUF Model...")
+    # 2. Check Model + GPU server binary
+    print("[CHECK] GGUF model + GPU llama-server...")
     from agent.llm import LocalLLM
     llm = LocalLLM()
     if llm.model_path and os.path.exists(llm.model_path):
         print(f"  - Model file: OK ({llm.model_path})")
     else:
-        print("  - Model file: NOT FOUND (Model path not configured or file missing)")
+        print("  - Model file: NOT FOUND (set CONTROLPC_LLAMA_MODEL or drop it in <repo>\\models)")
+    if llm.server_exe and os.path.exists(llm.server_exe):
+        print(f"  - llama-server.exe (GPU): OK ({llm.server_exe})")
+    else:
+        print("  - llama-server.exe (GPU): NOT FOUND (set CONTROLPC_LLAMA_SERVER or drop it in <repo>\\llama)")
 
     # 3. Check Frontend dist
     print("[CHECK] Frontend bundle...")
@@ -87,7 +91,7 @@ if __name__ == "__main__":
         height=800,
         resizable=True,
         min_size=(1024, 768),
-        background_color="#f6f8fb" # Match default page light theme background
+        background_color="#070a12" # Match dark glassmorphism theme background
     )
     
     webview.start()

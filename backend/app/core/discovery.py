@@ -5,11 +5,17 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("discovery")
 
-# Utility/helper apps that should lose to the primary application when names overlap.
+# Utility/helper apps that should lose to the primary application when names
+# overlap. The penalty only applies when the keyword is in the candidate but NOT
+# in the user's query, so typing "task manager" won't penalise "manager".
 AUXILIARY_KEYWORDS = (
     "worksharing", "monitor", "accelerator", "uninstall", "updater", "update",
     "license", "licensing", "genuine", "feedback", "repair", "language pack",
     "content library", "batch print", "etransmit", "viewer", "sample",
+    "diagnostic", "diagnostics", "setup", "installer", "configurator", "config",
+    "trial", "readme", "documentation", "help", "crash", "report", "recovery",
+    "migrate", "migration", "cleanup", "add-in", "addin", "plugin", "utility",
+    "utilities", "reset", "activation", "activate", "register", "registration",
 )
 
 
@@ -28,10 +34,12 @@ def score_app_match(query: str, app_key: str, exe_path: str) -> float:
     q_compact = q.replace(" ", "")
     exe_compact = exe_name.replace(" ", "")
 
+    # Penalise helper/companion apps (monitor, updater, worksharing, ...).
     for aux in AUXILIARY_KEYWORDS:
         if aux in k and aux not in q:
             score -= 500.0
 
+    # Strong bonus when the executable name matches the query (the canonical app).
     if q_compact == exe_compact or exe_compact == q_compact.replace(".exe", ""):
         score += 800.0
     elif q_compact in exe_compact or exe_compact in q_compact:
@@ -48,7 +56,24 @@ def score_app_match(query: str, app_key: str, exe_path: str) -> float:
             return -1.0
         score += 80.0 * matched_words - len(k) * 0.3
 
+    # Prefer the most specific (fewest extra words) candidate: "revit" should pick
+    # "Revit 2024" over "Revit Worksharing Monitor".
+    extra_tokens = max(0, len(k.split()) - len(q_words))
+    score -= extra_tokens * 40.0
+
     return score
+
+
+def find_app_candidates(query, candidates: Dict[str, str], top_n: int = 5):
+    """Return the top-N (app_key, exe_path, score) matches with score > 0,
+    sorted best-first. Used for confidence/ambiguity decisions."""
+    scored = []
+    for key, path in candidates.items():
+        s = score_app_match(query, key, path)
+        if s > 0:
+            scored.append((key, path, s))
+    scored.sort(key=lambda t: t[2], reverse=True)
+    return scored[:top_n]
 
 
 def find_best_app_match(query: str, candidates: Dict[str, str]) -> Optional[Tuple[str, str]]:
@@ -132,7 +157,7 @@ def find_file_in_folders(filename: str, search_roots: List[str] = None) -> List[
     Performs a fast recursive search for a specific filename within common directories.
     """
     if search_roots is None:
-        user_profile = os.environ.get("USERPROFILE", "C:\\Users\\admin")
+        user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
         search_roots = [
             os.path.join(user_profile, "Desktop"),
             os.path.join(user_profile, "Documents")

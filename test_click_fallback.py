@@ -32,11 +32,11 @@ def test_dangerous_labels_policy():
     assert res_send["confirmation_mode"] == "confirm_final"
     print(" - UIA click on 'Send' label: OK")
     
-    # 4. UIA click on "Thanh toán" (Vietnamese for Pay)
+    # 4. UIA click on a "Pay" button (Vietnamese label "Thanh toán")
     res_pay = policy.evaluate_action("click_uia", {"auto_id": "btn_thanh_toan"})
     assert res_pay["risk_level"] == "high"
     assert res_pay["confirmation_mode"] == "confirm_final"
-    print(" - UIA click on 'Thanh toán' (Pay) AutoId: OK")
+    print(" - UIA click on 'Pay' AutoId: OK")
     
     # 5. UIA click on "Submit"
     res_submit = policy.evaluate_action("click_uia", {"name": "Submit Form"})

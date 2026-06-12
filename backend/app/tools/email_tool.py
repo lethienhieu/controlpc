@@ -6,14 +6,13 @@ from typing import List, Dict, Any, Optional
 
 from policy import permissions
 from integrations import smtp_imap
+from core import paths
 
 logger = logging.getLogger("tools.email_tool")
 
-# Resolve paths
-TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(TOOLS_DIR)))
-CONTACTS_PATH = os.path.join(WORKSPACE_DIR, "config", "contacts.json")
-DRAFT_PATH = os.path.join(WORKSPACE_DIR, "workspace", "temp", "current_draft.json")
+# Contacts = active brain config; draft = transient brain run dir.
+CONTACTS_PATH = paths.config_file("contacts.json")
+DRAFT_PATH = os.path.join(paths.run_dir(), "email_draft.json")
 
 def validate_recipient(email: str) -> Dict[str, Any]:
     """
@@ -23,7 +22,7 @@ def validate_recipient(email: str) -> Dict[str, Any]:
     email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
     
     if not re.match(email_regex, email_clean):
-        return {"success": False, "error": f"Định dạng email không hợp lệ: '{email}'"}
+        return {"success": False, "error": f"Invalid email format: '{email}'"}
         
     # Check contacts list
     contacts = []
@@ -84,7 +83,7 @@ def create_draft(to_email: str, subject: str, body: str, attachments: List[str] 
         logger.info(f"Email draft created and saved to {DRAFT_PATH}")
         return {
             "success": True,
-            "message": f"Đã soạn thành công bản nháp email gửi cho: {to_email}",
+            "message": f"Successfully created an email draft addressed to: {to_email}",
             "draft": draft
         }
     except Exception as e:
@@ -117,7 +116,7 @@ def attach_file_to_draft(filepath: str) -> Dict[str, Any]:
             with open(DRAFT_PATH, "w", encoding="utf-8") as f:
                 json.dump(draft, f, ensure_ascii=False, indent=2)
                 
-        return {"success": True, "message": f"Đã đính kèm tệp tin: {os.path.basename(filepath_norm)}", "draft": draft}
+        return {"success": True, "message": f"Attached file: {os.path.basename(filepath_norm)}", "draft": draft}
     except Exception as e:
         logger.error(f"Failed to attach file to draft: {e}")
         return {"success": False, "error": str(e)}

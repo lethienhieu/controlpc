@@ -1,21 +1,51 @@
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field, ValidationError
-from typing import Literal
+from pydantic import BaseModel, Field, ValidationError, field_validator
 import json
 
 from agent.llm import LocalLLM
 from agent.prompts import CLASSIFICATION_PROMPT, REACT_PLANNER_PROMPT
-from database import memory
+from database import memory, journal
 from core import uia_control, os_control
+from tools.registry import TOOL_REGISTRY
 
 logger = logging.getLogger("planner")
 
+# Native OS-level actions handled directly by the executor.
+OS_ACTIONS = {"open", "hotkey", "press", "click_uia", "click", "type", "learn", "finish"}
+# Full set the planner may emit = OS actions plus every registered tool
+# (file.*, document.*, email.*, message.*). Previously the schema was locked to
+# the 8 OS actions, which made the entire tool registry unreachable.
+ALLOWED_ACTIONS = OS_ACTIONS | set(TOOL_REGISTRY.keys())
+
+# JSON schema passed to llama-server so the (small) model is grammar-constrained
+# to emit a valid JSON object instead of prose/markdown. The `action` string is
+# further validated against ALLOWED_ACTIONS by Pydantic below.
+ACTION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reasoning": {"type": "string"},
+        "action": {"type": "string"},
+        "params": {"type": "object"},
+    },
+    "required": ["reasoning", "action", "params"],
+}
+
 class ActionDecision(BaseModel):
-    reasoning: str = Field(..., description="Lý do chọn hành động này, ưu tiên giải pháp CLI/phím tắt/UIA")
-    action: Literal["open", "hotkey", "press", "click_uia", "click", "type", "learn", "finish"]
+    reasoning: str = Field(..., description="Reason for choosing this action, prioritizing CLI/hotkey/UIA solutions")
+    action: str = Field(..., description="Name of the OS action or registered tool")
     params: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("action")
+    @classmethod
+    def _validate_action(cls, v: str) -> str:
+        if v not in ALLOWED_ACTIONS:
+            raise ValueError(
+                f"Unknown action '{v}'. Must be one of OS actions {sorted(OS_ACTIONS)} "
+                f"or a registered tool {sorted(TOOL_REGISTRY.keys())}."
+            )
+        return v
 
 class IntentClassifier:
     def __init__(self, llm: LocalLLM):
@@ -33,11 +63,7 @@ class IntentClassifier:
             
         try:
             prompt = CLASSIFICATION_PROMPT.format(message=message)
-            ans = self.llm.generate(
-                prompt=f"<start_of_turn>user\n{prompt}\n<end_of_turn>\n<start_of_turn>model\n",
-                max_tokens=8,
-                temperature=0.0
-            ).strip().lower()
+            ans = self.llm.generate(prompt=prompt, max_tokens=8, temperature=0.0).strip().lower()
             return "os_control" in ans
         except Exception as e:
             logger.error(f"Real LLM classification failed: {e}")
@@ -99,29 +125,42 @@ class ReActPlanner:
                 goal=goal,
                 step=step,
                 max_steps=max_steps,
+                memory=journal.read_memory_digest(900) or "(none)",
                 history=json.dumps(obs_dict)
             )
             
-            content = self.llm.generate(
-                prompt=f"<start_of_turn>user\n{prompt}\n<end_of_turn>\n<start_of_turn>model\n",
-                max_tokens=256,
-                temperature=0.1
-            ).strip()
-            
-            # Clean markdown code blocks
-            if content.startswith("```"):
-                lines = content.split("\n")
-                if lines[0].startswith("```json") or lines[0].startswith("```"):
-                    content = "\n".join(lines[1:-1]).strip()
-            
-            # Parse & validate using Pydantic
-            parsed_data = json.loads(content)
-            validated = ActionDecision(**parsed_data)
-            return validated.model_dump()
-            
+            # Bounded retry: a model can still produce an invalid `action` or odd
+            # JSON even when grammar-constrained. Re-generate up to 3x (cooling
+            # temperature) before giving up. No silent mock fallback.
+            last_err = None
+            for attempt in range(3):
+                try:
+                    content = self.llm.generate(
+                        prompt=prompt,
+                        max_tokens=256,
+                        temperature=0.1 if attempt == 0 else 0.0,
+                        json_schema=ACTION_JSON_SCHEMA,
+                    ).strip()
+
+                    # Safety net: strip markdown fences if the model added them.
+                    if content.startswith("```"):
+                        lines = content.split("\n")
+                        if lines[0].startswith("```"):
+                            content = "\n".join(lines[1:-1]).strip()
+
+                    parsed_data = json.loads(content)
+                    validated = ActionDecision(**parsed_data)
+                    return validated.model_dump()
+                except Exception as e:
+                    last_err = e
+                    logger.warning(f"Planner attempt {attempt + 1}/3 failed: {e}")
+
+            logger.error(f"Real GGUF planning failed after retries: {last_err}")
+            raise last_err
+
         except Exception as e:
             logger.error(f"Real GGUF planning failed: {e}")
-            raise e
+            raise
 
     def _get_mock_decision(self, goal: str, step: int, history_logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         goal_lower = goal.lower()
@@ -140,7 +179,7 @@ class ReActPlanner:
                 app = app_match.group(1).strip().lower()
                 
             return {
-                "reasoning": f"Nhận diện lệnh dạy của người dùng: '{app}' ứng với đường dẫn '{path}'. Tôi lưu dữ liệu vào cơ sở tri thức cục bộ.",
+                "reasoning": f"Detected a teaching command from the user: '{app}' maps to the path '{path}'. I am saving this data to the local knowledge base.",
                 "action": "learn",
                 "params": {
                     "key": app,
@@ -157,40 +196,40 @@ class ReActPlanner:
                 
             if step == 1:
                 return {
-                    "reasoning": f"Truy vấn thông tin tệp tin/đường dẫn của '{app}' để mở trực tiếp.",
+                    "reasoning": f"Querying the file/path information for '{app}' in order to open it directly.",
                     "action": "open",
                     "params": {"app_name": app}
                 }
             else:
                 return {
-                    "reasoning": f"Đã thực hiện mở thành công '{app}'. Kết thúc.",
+                    "reasoning": f"Successfully opened '{app}'. Finishing.",
                     "action": "finish",
-                    "params": {"message": f"Mở phần mềm '{app}' thành công!"}
+                    "params": {"message": f"Successfully opened the application '{app}'!"}
                 }
 
         mock_steps_database = {
             "revit 2024": [
                 {
-                    "reasoning": "Người dùng yêu cầu mở Revit 2024. Tôi sẽ tra cứu cơ sở tri thức cục bộ và khởi chạy bằng đường dẫn.",
+                    "reasoning": "The user requested to open Revit 2024. I will look it up in the local knowledge base and launch it using its path.",
                     "action": "open",
                     "params": {"app_name": "revit 2024"}
                 },
                 {
-                    "reasoning": "Revit 2024 đã được khởi động thành công. Tôi kết thúc tác vụ.",
+                    "reasoning": "Revit 2024 was launched successfully. I am finishing the task.",
                     "action": "finish",
-                    "params": {"message": "Đã tìm thấy và khởi chạy Revit 2024 thành công!"}
+                    "params": {"message": "Successfully found and launched Revit 2024!"}
                 }
             ],
             "chrome": [
                 {
-                    "reasoning": "Mở trình duyệt Google Chrome thông qua lệnh hệ thống.",
+                    "reasoning": "Opening the Google Chrome browser via a system command.",
                     "action": "open",
                     "params": {"app_name": "chrome"}
                 },
                 {
-                    "reasoning": "Chrome đã được mở. Tôi kết thúc tác vụ.",
+                    "reasoning": "Chrome has been opened. I am finishing the task.",
                     "action": "finish",
-                    "params": {"message": "Đã mở Google Chrome."}
+                    "params": {"message": "Google Chrome has been opened."}
                 }
             ]
         }
@@ -207,7 +246,7 @@ class ReActPlanner:
             return steps[step_idx]
             
         return {
-            "reasoning": "Mục tiêu đã hoàn thành.",
+            "reasoning": "The goal has been completed.",
             "action": "finish",
-            "params": {"message": "Tác vụ hoàn tất."}
+            "params": {"message": "Task completed."}
         }

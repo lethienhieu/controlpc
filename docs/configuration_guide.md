@@ -1,39 +1,39 @@
-# Hướng dẫn cấu hình CONTROLPC (Email, Thư mục, Danh bạ)
+# CONTROLPC Configuration Guide (Email, Folders, Contacts)
 
-Tài liệu này hướng dẫn cách thiết lập các cài đặt bảo mật, phân quyền thư mục, danh bạ liên hệ và kết nối Email cho hệ thống CONTROLPC.
+This document explains how to set up security settings, folder permissions, the contact list, and the Email connection for the CONTROLPC system.
 
-Mọi tệp cấu hình JSON được đặt trong thư mục gốc `config/`.
-
----
-
-## 1. Cấu hình quyền truy cập Thư mục & Ứng dụng (`config/permissions.json`)
-
-Tệp `config/permissions.json` kiểm soát mức độ tự động hóa và vùng dữ liệu được phép thao tác của Agent.
-
-### 1.1. Phân quyền Thư mục (File Permissions)
-* `allowed_read_dirs`: Danh sách các thư mục Agent được phép đọc dữ liệu (ví dụ: Documents, Downloads).
-* `allowed_write_dirs`: Danh sách các thư mục Agent được phép tạo, ghi hoặc sửa đổi tệp tin.
-* `blocked_dirs`: Thư mục cấm tuyệt đối (ví dụ: `C:\Windows`, `C:\Program Files`, AppData). Agent sẽ bị chặn ngay lập tức nếu cố đọc/ghi tại các vùng này.
-* `allowed_extensions`: Danh sách định dạng tệp tin được phép ghi (ví dụ: `.docx`, `.xlsx`, `.pdf`, `.txt`, `.png`, `.jpg`).
-* `max_attachment_mb`: Giới hạn kích thước tối đa của tệp đính kèm khi gửi qua email.
-
-### 1.2. Quyền khởi chạy Ứng dụng (App Permissions)
-Mỗi ứng dụng được định nghĩa chính sách chạy (`launch`):
-* `allow`: Cho phép chạy trực tiếp.
-* `confirm`: Yêu cầu xác nhận của người dùng.
-* `block`: Cấm chạy.
-* `allowed_commands`: Danh sách các lệnh shell/CLI được phép thực thi (chỉ áp dụng đối với các công cụ CLI như `cmd` hoặc `powershell`).
-
-### 1.3. Cài đặt An toàn (Safety Settings)
-* `coordinate_click_enabled`: `true` hoặc `false` để bật/tắt tính năng click theo tọa độ chuột tuyệt đối.
-* `remote_gateway_enabled`: Bật/tắt việc nhận lệnh từ xa.
-* `default_action_policy`: Chính sách duyệt mặc định đối với các tác vụ thông thường (`confirm_once`, `confirm_final` hoặc `none`).
+All JSON configuration files are placed in the root `config/` folder.
 
 ---
 
-## 2. Cấu hình Email và Kết nối (`config/email_settings.json`)
+## 1. Folder & Application Access Configuration (`config/permissions.json`)
 
-Thiết lập tài khoản gửi thư và cấu hình cổng SMTP/IMAP:
+The `config/permissions.json` file controls the level of automation and the data areas the Agent is allowed to operate on.
+
+### 1.1. Folder Permissions (File Permissions)
+* `allowed_read_dirs`: List of folders the Agent is allowed to read data from (e.g., Documents, Downloads).
+* `allowed_write_dirs`: List of folders the Agent is allowed to create, write, or modify files in.
+* `blocked_dirs`: Strictly forbidden folders (e.g., `C:\Windows`, `C:\Program Files`, AppData). The Agent is blocked immediately if it attempts to read/write in these areas.
+* `allowed_extensions`: List of file formats allowed for writing (e.g., `.docx`, `.xlsx`, `.pdf`, `.txt`, `.png`, `.jpg`).
+* `max_attachment_mb`: Maximum size limit for attachments sent via email.
+
+### 1.2. Application Launch Permissions (App Permissions)
+Each application is assigned a run policy (`launch`):
+* `allow`: Allow it to run directly.
+* `confirm`: Require user confirmation.
+* `block`: Forbid it from running.
+* `allowed_commands`: List of shell/CLI commands allowed to be executed (applies only to CLI tools such as `cmd` or `powershell`).
+
+### 1.3. Safety Settings (Safety Settings)
+* `coordinate_click_enabled`: `true` or `false` to enable/disable the absolute mouse-coordinate click feature.
+* `remote_gateway_enabled`: Enable/disable receiving remote commands.
+* `default_action_policy`: The default approval policy for normal tasks (`confirm_once`, `confirm_final`, or `none`).
+
+---
+
+## 2. Email and Connection Configuration (`config/email_settings.json`)
+
+Set up the sending account and configure the SMTP/IMAP ports:
 
 ```json
 {
@@ -48,32 +48,32 @@ Thiết lập tài khoản gửi thư và cấu hình cổng SMTP/IMAP:
 ```
 
 > [!IMPORTANT]
-> Không lưu mật khẩu thô trong tệp cấu hình JSON. Mật khẩu kết nối hòm thư phải được lưu thông qua biến môi trường bảo mật `EMAIL_PASSWORD` hoặc Windows Credential Manager.
+> Do not store raw passwords in the JSON configuration file. The mailbox connection password must be stored via the secure environment variable `EMAIL_PASSWORD` or Windows Credential Manager.
 
 ---
 
-## 3. Cấu hình Danh bạ & Phân quyền liên hệ (`config/contacts.json`)
+## 3. Contacts & Contact Permission Configuration (`config/contacts.json`)
 
-Mỗi liên hệ được phân mức độ tin cậy để tránh tự động gửi email/tin nhắn nhạy cảm:
+Each contact is assigned a trust level to avoid automatically sending sensitive emails/messages:
 
-* **Mức độ chính sách (`policy`):**
-  1. `draft_only`: Chỉ soạn bản nháp (draft), tuyệt đối không gửi thật.
-  2. `confirm_before_send`: Enforce hỏi xác nhận cuối (requires confirm-final) tại giao diện chính trước khi gửi.
-  3. `auto_send_allowed`: Cho phép gửi tự động không cần hỏi (chỉ nên gán cho hòm thư cá nhân hoặc kiểm thử).
-  4. `blocked`: Cấm gửi thông tin.
+* **Policy level (`policy`):**
+  1. `draft_only`: Compose drafts only; never actually send.
+  2. `confirm_before_send`: Enforce a final confirmation prompt (requires confirm-final) in the main interface before sending.
+  3. `auto_send_allowed`: Allow automatic sending without prompting (should only be assigned to personal or test mailboxes).
+  4. `blocked`: Forbid sending information.
 
-Ví dụ tệp `config/contacts.json`:
+Example `config/contacts.json` file:
 ```json
 {
   "contacts": [
     {
-      "name": "Nam GĐ",
+      "name": "Sample Director",
       "email": "nam@example.com",
       "phone": "+84901234567",
       "policy": "confirm_before_send"
     },
     {
-      "name": "Hằng HR",
+      "name": "Sample HR",
       "email": "hang@example.com",
       "phone": "+84988888888",
       "policy": "draft_only"

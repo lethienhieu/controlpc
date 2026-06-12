@@ -5,13 +5,14 @@ from typing import Dict, Any, Optional
 
 from integrations import contacts
 from policy import permissions
+from core import paths
 
 logger = logging.getLogger("tools.messaging_tool")
 
-# Paths
+# WORKSPACE_DIR (repo root) still used for user-visible output; draft is transient.
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(TOOLS_DIR)))
-DRAFT_PATH = os.path.join(WORKSPACE_DIR, "workspace", "temp", "current_message_draft.json")
+DRAFT_PATH = os.path.join(paths.run_dir(), "message_draft.json")
 
 def find_contact(query: str) -> Dict[str, Any]:
     """
@@ -19,8 +20,8 @@ def find_contact(query: str) -> Dict[str, Any]:
     """
     c = contacts.find_contact_by_query(query)
     if c:
-        return {"success": True, "contact": c, "message": f"Tìm thấy liên hệ: {c['name']} ({c['email']})"}
-    return {"success": False, "error": f"Không tìm thấy liên hệ nào khớp với từ khóa: '{query}'"}
+        return {"success": True, "contact": c, "message": f"Found contact: {c['name']} ({c['email']})"}
+    return {"success": False, "error": f"No contact found matching the keyword: '{query}'"}
 
 def create_draft(contact_query: str, text: str) -> Dict[str, Any]:
     """
@@ -46,7 +47,7 @@ def create_draft(contact_query: str, text: str) -> Dict[str, Any]:
         logger.info(f"Message draft created for {c['name']}")
         return {
             "success": True,
-            "message": f"Đã soạn bản nháp tin nhắn gửi cho: {c['name']}",
+            "message": f"Drafted a message for: {c['name']}",
             "draft": draft
         }
     except Exception as e:
@@ -68,14 +69,14 @@ def send_message(contact_query: str, text: str) -> Dict[str, Any]:
     policy = permissions.get_contact_send_policy(email)
     
     if policy == "blocked":
-        return {"success": False, "error": f"Gửi tin nhắn bị cấm đối với liên hệ: {c['name']}"}
-        
+        return {"success": False, "error": f"Sending messages is blocked for contact: {c['name']}"}
+
     if policy == "draft_only":
         # Force downgrade to draft creation
         create_draft(contact_query, text)
         return {
-            "success": False, 
-            "error": f"Liên hệ '{c['name']}' có chính sách DRAFT_ONLY. Hệ thống tự động chuyển sang lưu bản nháp."
+            "success": False,
+            "error": f"Contact '{c['name']}' has a DRAFT_ONLY policy. The system has automatically switched to saving a draft."
         }
         
     # Send mock message
@@ -84,11 +85,11 @@ def send_message(contact_query: str, text: str) -> Dict[str, Any]:
         msg_path = os.path.join(WORKSPACE_DIR, "workspace", "output", msg_filename)
         
         output_text = (
-            f"=== TIN NHẮN ĐÃ GỬI ===\n"
-            f"Người nhận: {c['name']}\n"
-            f"Số điện thoại: {c.get('phone', '')}\n"
+            f"=== MESSAGE SENT ===\n"
+            f"Recipient: {c['name']}\n"
+            f"Phone number: {c.get('phone', '')}\n"
             f"Email: {c.get('email', '')}\n"
-            f"Nội dung:\n{text}\n"
+            f"Content:\n{text}\n"
         )
         
         with open(msg_path, "w", encoding="utf-8") as f:
@@ -104,7 +105,7 @@ def send_message(contact_query: str, text: str) -> Dict[str, Any]:
         logger.info(f"[MOCK MESSAGE] Sent message to {c['name']}")
         return {
             "success": True,
-            "message": f"Đã gửi tin nhắn (giả lập) thành công đến: {c['name']}",
+            "message": f"Message sent (mock) successfully to: {c['name']}",
             "path": msg_path
         }
     except Exception as e:
@@ -123,5 +124,5 @@ def open_thread(contact_query: str) -> Dict[str, Any]:
     logger.info(f"Opening thread for {c['name']}")
     return {
         "success": True,
-        "message": f"Đã mở cửa sổ trò chuyện với: {c['name']}"
+        "message": f"Opened the chat window with: {c['name']}"
     }

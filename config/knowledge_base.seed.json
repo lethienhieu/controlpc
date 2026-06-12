@@ -1,0 +1,8 @@
+{
+  "apps": {
+    "notepad": "C:\\Windows\\System32\\notepad.exe",
+    "calc": "C:\\Windows\\System32\\calc.exe",
+    "cmd": "C:\\Windows\\System32\\cmd.exe"
+  },
+  "custom_triggers": {}
+}

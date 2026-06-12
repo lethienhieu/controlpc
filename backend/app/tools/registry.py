@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any, Callable
 
-from tools import file_tool, document_tool, email_tool, messaging_tool
+from tools import file_tool, document_tool, email_tool, messaging_tool, shell_tool
 
 logger = logging.getLogger("tools.registry")
 
@@ -23,7 +23,8 @@ TOOL_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "message.create_draft": messaging_tool.create_draft,
     "message.send": messaging_tool.send_message,
     "message.find_contact": messaging_tool.find_contact,
-    "message.open_thread": messaging_tool.open_thread
+    "message.open_thread": messaging_tool.open_thread,
+    "shell.run": shell_tool.run_command
 }
 
 def execute_tool_call(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:

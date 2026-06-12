@@ -7,8 +7,9 @@ echo          CONTROLPC - LOCAL OS AGENT LAUNCHER
 echo ========================================================
 echo.
 
-:: Set absolute root directory (hardcoded, no spaces issue)
-set "ROOT=C:\1 CODE\CONTROLPC"
+:: Resolve root directory from this script's own location (portable, any path)
+set "ROOT=%~dp0"
+if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "FRONTEND=%ROOT%\frontend"
 set "BACKEND=%ROOT%\backend"
 

@@ -16,30 +16,30 @@ def test_contact_lookup():
     # Fuzzy match by name
     res = messaging_tool.find_contact("Nam")
     assert res["success"]
-    assert res["contact"]["name"] == "Nam GĐ"
+    assert res["contact"]["name"] == "Sample Director"
     
     # Fuzzy match by role
     res = messaging_tool.find_contact("HR")
     assert res["success"]
-    assert res["contact"]["name"] == "Hằng HR"
+    assert res["contact"]["name"] == "Sample HR"
     
     # Non-existent contact
     res = messaging_tool.find_contact("Unknown Person")
     assert not res["success"]
-    assert "Không tìm thấy liên hệ" in res["error"]
+    assert "No contact found" in res["error"]
     
     print(" - Contact lookup passed!")
 
 def test_message_draft_creation():
     print("[TEST] Testing message draft creation and persistence...")
-    draft_path = os.path.join(BASE_DIR, "workspace", "temp", "current_message_draft.json")
+    draft_path = messaging_tool.DRAFT_PATH
     
     # Clean up old draft
     if os.path.exists(draft_path):
         os.remove(draft_path)
         
     contact_query = "Nam"
-    text = "Chào anh Nam, em gửi tin nhắn báo cáo tiến độ."
+    text = "Hi Nam, I'm sending you a progress report message."
     
     res = messaging_tool.create_draft(contact_query, text)
     assert res["success"]
@@ -48,7 +48,7 @@ def test_message_draft_creation():
     # Verify file content
     with open(draft_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-        assert data["contact_name"] == "Nam GĐ"
+        assert data["contact_name"] == "Sample Director"
         assert data["email"] == "nam@example.com"
         assert data["phone"] == "0912345678"
         assert data["text"] == text
@@ -57,7 +57,7 @@ def test_message_draft_creation():
 
 def test_gating_and_sending():
     print("[TEST] Testing send messaging with policy gates...")
-    draft_path = os.path.join(BASE_DIR, "workspace", "temp", "current_message_draft.json")
+    draft_path = messaging_tool.DRAFT_PATH
     
     # Clean up old drafts
     if os.path.exists(draft_path):
@@ -65,7 +65,7 @@ def test_gating_and_sending():
         
     # 1. Test sending to Hang HR (draft_only)
     # This should fail the direct send, and automatically create a draft instead
-    res_hang = messaging_tool.send_message("Hằng HR", "Nội dung gửi chị Hằng")
+    res_hang = messaging_tool.send_message("HR", "Message content for HR")
     assert not res_hang["success"]
     assert "DRAFT_ONLY" in res_hang["error"]
     assert os.path.exists(draft_path), "Draft should have been created for DRAFT_ONLY contact"
@@ -73,27 +73,27 @@ def test_gating_and_sending():
     # Verify draft contents
     with open(draft_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-        assert data["contact_name"] == "Hằng HR"
-        assert data["text"] == "Nội dung gửi chị Hằng"
+        assert data["contact_name"] == "Sample HR"
+        assert data["text"] == "Message content for HR"
         
     # Clean up again
     os.remove(draft_path)
     
     # 2. Test sending to Nam GD (confirm_before_send)
     # The tool level allows send_message (simulates post-approval run)
-    msg_path = os.path.join(BASE_DIR, "workspace", "output", "sent_message_Nam_GĐ.txt")
+    msg_path = os.path.join(BASE_DIR, "workspace", "output", "sent_message_Sample_Director.txt")
     if os.path.exists(msg_path):
         os.remove(msg_path)
         
-    res_nam = messaging_tool.send_message("Nam", "Nội dung gửi anh Nam")
+    res_nam = messaging_tool.send_message("Nam", "Message content for Nam")
     assert res_nam["success"]
     assert os.path.exists(msg_path), "Mock sent message text file should exist"
     assert not os.path.exists(draft_path), "Draft path should be cleaned up after successful send"
     
     with open(msg_path, "r", encoding="utf-8") as f:
         content = f.read()
-        assert "Người nhận: Nam GĐ" in content
-        assert "Nội dung:\nNội dung gửi anh Nam" in content
+        assert "Recipient: Sample Director" in content
+        assert "Content:\nMessage content for Nam" in content
         
     print(" - Messaging gating and sending passed!")
 
@@ -104,7 +104,7 @@ def test_policy_enforcement():
     # Evaluating message.send for Nam GD (policy: confirm_before_send)
     res_nam = policy.evaluate_action("message.send", {
         "recipient": "nam@example.com",
-        "text": "Chào anh"
+        "text": "Hello"
     })
     assert res_nam["decision"] == "requires_confirmation"
     assert res_nam["confirmation_mode"] == "confirm_final"
@@ -112,10 +112,10 @@ def test_policy_enforcement():
     # Evaluating message.send for Hang HR (policy: draft_only)
     res_hang = policy.evaluate_action("message.send", {
         "recipient": "hang@example.com",
-        "text": "Chào chị"
+        "text": "Hello"
     })
     assert res_hang["decision"] == "blocked"
-    assert "Chỉ cho phép soạn nháp" in res_hang["preview"]["title"]
+    assert "drafts only allowed" in res_hang["preview"]["title"]
     
     print(" - ActionPolicy evaluation passed!")
 

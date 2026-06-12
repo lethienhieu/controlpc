@@ -17,7 +17,7 @@ def test_risk_classification():
     assert classify_action_risk("email.send", {"recipient": "test@example.com"}) == "high"
     assert classify_action_risk("click", {"x": 100, "y": 200}) == "high"
     assert classify_action_risk("click_uia", {"name": "Button"}) == "medium"
-    assert classify_action_risk("file.search", {"path": "C:\\Users\\admin\\Documents"}) == "low"
+    assert classify_action_risk("file.search", {"path": os.path.expandvars("%USERPROFILE%\\Documents")}) == "low"
     assert classify_action_risk("open", {"app_name": "notepad"}) == "low"
     assert classify_action_risk("open", {"app_name": "cmd"}) == "medium"
     
@@ -30,13 +30,15 @@ def test_file_permissions():
     assert not check_file_read_permission("C:\\Windows\\System32\\cmd.exe")
     assert not check_file_write_permission("C:\\Windows\\System32\\config.db")
     
-    # Allowed read checks
-    assert check_file_read_permission("C:\\Users\\admin\\Documents\\report.docx")
-    assert check_file_read_permission("C:\\1 CODE\\CONTROLPC\\workspace\\output\\test.txt")
-    
+    # Allowed read checks (portable: user profile + this repo's workspace)
+    user_docs = os.path.expandvars("%USERPROFILE%\\Documents")
+    workspace_out = os.path.join(BASE_DIR, "workspace", "output")
+    assert check_file_read_permission(os.path.join(user_docs, "report.docx"))
+    assert check_file_read_permission(os.path.join(workspace_out, "test.txt"))
+
     # Allowed write checks
-    assert check_file_write_permission("C:\\Users\\admin\\Documents\\output.docx")
-    assert not check_file_write_permission("C:\\Users\\admin\\Documents\\output.exe")  # blocked extension .exe
+    assert check_file_write_permission(os.path.join(user_docs, "output.docx"))
+    assert not check_file_write_permission(os.path.join(user_docs, "output.exe"))  # blocked extension .exe
     
     print("[TEST] File permission tests passed!")
 
@@ -68,7 +70,7 @@ def test_action_policy_evaluation():
     
     # 5. Low Risk / Allowed Read-Only Action
     # Let's check with file.search under allowed dir
-    res_search = policy.evaluate_action("file.search", {"path": "C:\\Users\\admin\\Documents"})
+    res_search = policy.evaluate_action("file.search", {"path": os.path.expandvars("%USERPROFILE%\\Documents")})
     # Since search is low risk, if no global override is forced it would be allowed,
     # but wait: in ActionPolicy:
     # "If decision is allowed and tool is not finish/learn, safety override upgrades it to requires_confirmation (confirm_once)"

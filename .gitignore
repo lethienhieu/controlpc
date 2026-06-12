@@ -21,7 +21,6 @@ htmlcov/
 # SQLite Database / Runtime data
 backend/app/database/*.db
 backend/app/database/*.json
-!backend/app/database/knowledge_base.json
 backend/app/temp/
 backend/temp/
 workspace/temp/
@@ -35,6 +34,18 @@ dist/
 dist-ssr/
 *.local
 .eslintcache
+
+# Agent brain (runtime state/memory/logs/cache/drafts) — keep out of git
+.controlpc/
+
+# Local agent working notes (Claude Code research ledger / session memory)
+.claude/
+
+# Local GPU runtime (large binaries / model weights — keep out of git)
+llama/
+models/
+*.gguf
+config/model_settings.json
 
 # Windows OS metadata
 Thumbs.db

@@ -1,17 +1,21 @@
 import os
 import json
 import sqlite3
+import hashlib
+import hmac
 import logging
 import threading
 import time
 from typing import Dict, Any, Optional, List
 
+from core import paths
+
 logger = logging.getLogger("memory")
 lock = threading.Lock()
 
-DB_DIR = os.path.dirname(os.path.abspath(__file__))
-KB_PATH = os.path.join(DB_DIR, "knowledge_base.json")
-SQLITE_PATH = os.path.join(DB_DIR, "history.db")
+# Durable agent memory lives in the brain's state dir (not inside the code pkg).
+KB_PATH = os.path.join(paths.state_dir(), "knowledge_base.json")
+SQLITE_PATH = os.path.join(paths.state_dir(), "history.db")
 
 # Ensure SQLite DB is initialized
 def init_db():
@@ -44,9 +48,17 @@ def init_db():
                 rollback_hint TEXT,
                 source_channel TEXT,
                 sender_id TEXT,
-                executed_status TEXT
+                executed_status TEXT,
+                prev_hash TEXT,
+                entry_hash TEXT
             )
         """)
+        # Idempotent migration for older DBs missing the hash-chain columns.
+        for col in ("prev_hash", "entry_hash"):
+            try:
+                cursor.execute(f"ALTER TABLE audit_logs ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS remote_senders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,12 +72,26 @@ def init_db():
                 pin TEXT
             )
         """)
-        # Seed default admin telegram sender if empty
+        # Procedural memory / skill library: successful goal -> action plan,
+        # so repeated tasks replay instantly without re-asking the LLM.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS task_plans (
+                goal_norm TEXT PRIMARY KEY,
+                goal_original TEXT,
+                steps TEXT,
+                uses INTEGER DEFAULT 1,
+                last_used REAL
+            )
+        """)
+        # Seed default admin telegram sender if empty. The default PIN can be
+        # overridden via the CONTROLPC_REMOTE_PIN env var (change it before
+        # enabling the remote gateway in production).
         cursor.execute("SELECT COUNT(*) FROM remote_senders")
         if cursor.fetchone()[0] == 0:
+            default_pin = os.environ.get("CONTROLPC_REMOTE_PIN", "1234")
             cursor.execute(
                 "INSERT INTO remote_senders (sender_identity, name, enabled, auth_level, can_create_task, can_approve_high_risk, requires_pin_for_high_risk, pin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ("telegram:123456789", "Owner", 1, "admin", 1, 1, 1, "1234")
+                ("telegram:123456789", "Owner", 1, "admin", 1, 1, 1, default_pin)
             )
         conn.commit()
         conn.close()
@@ -159,36 +185,97 @@ def get_chat_logs() -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch chat logs: {e}")
     return logs
 
+def _canonical_audit(ts: float, action_id, tool, risk_level, decision, confirmation_mode,
+                     target_json, params_json, reason, rollback_hint, source_channel, sender_id) -> str:
+    """Deterministic string over the IMMUTABLE insert-time fields (executed_status
+    is intentionally excluded — it changes over the action lifecycle)."""
+    return json.dumps({
+        "timestamp": ts, "action_id": action_id, "tool": tool, "risk_level": risk_level,
+        "decision": decision, "confirmation_mode": confirmation_mode, "target": target_json,
+        "params": params_json, "reason": reason, "rollback_hint": rollback_hint,
+        "source_channel": source_channel, "sender_id": sender_id,
+    }, sort_keys=True, ensure_ascii=False)
+
+def _entry_hash(prev_hash: str, canonical: str) -> str:
+    return hashlib.sha256(((prev_hash or "") + canonical).encode("utf-8")).hexdigest()
+
 def save_audit_log(policy_res: Dict[str, Any], source_channel: str = "local_ui", sender_id: str = "user", executed_status: str = "pending") -> bool:
+    conn = None
     try:
-        conn = sqlite3.connect(SQLITE_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO audit_logs 
-               (timestamp, action_id, tool, risk_level, decision, confirmation_mode, target, params, reason, rollback_hint, source_channel, sender_id, executed_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                time.time(),
-                policy_res.get("action_id"),
-                policy_res.get("tool"),
-                policy_res.get("risk_level"),
-                policy_res.get("decision"),
-                policy_res.get("confirmation_mode"),
-                json.dumps(policy_res.get("target", {})),
-                json.dumps(policy_res.get("params", {})),
-                policy_res.get("reason"),
-                policy_res.get("rollback_hint"),
-                source_channel,
-                sender_id,
-                executed_status
+        with lock:
+            conn = sqlite3.connect(SQLITE_PATH)
+            cursor = conn.cursor()
+            # Previous link in the tamper-evident chain.
+            cursor.execute("SELECT entry_hash FROM audit_logs ORDER BY id DESC LIMIT 1")
+            row = cursor.fetchone()
+            prev_hash = row[0] if row and row[0] else ""
+
+            ts = time.time()
+            target_json = json.dumps(policy_res.get("target", {}))
+            params_json = json.dumps(policy_res.get("params", {}))
+            canonical = _canonical_audit(
+                ts, policy_res.get("action_id"), policy_res.get("tool"), policy_res.get("risk_level"),
+                policy_res.get("decision"), policy_res.get("confirmation_mode"), target_json, params_json,
+                policy_res.get("reason"), policy_res.get("rollback_hint"), source_channel, sender_id,
             )
-        )
-        conn.commit()
-        conn.close()
+            entry_hash = _entry_hash(prev_hash, canonical)
+
+            cursor.execute(
+                """INSERT INTO audit_logs
+                   (timestamp, action_id, tool, risk_level, decision, confirmation_mode, target, params, reason, rollback_hint, source_channel, sender_id, executed_status, prev_hash, entry_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    ts, policy_res.get("action_id"), policy_res.get("tool"), policy_res.get("risk_level"),
+                    policy_res.get("decision"), policy_res.get("confirmation_mode"), target_json, params_json,
+                    policy_res.get("reason"), policy_res.get("rollback_hint"), source_channel, sender_id,
+                    executed_status, prev_hash, entry_hash,
+                )
+            )
+            conn.commit()
         return True
     except Exception as e:
         logger.error(f"Failed to save audit log: {e}")
         return False
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+def verify_audit_chain() -> Dict[str, Any]:
+    """Recompute the hash chain and confirm no row was inserted, altered, or reordered."""
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM audit_logs ORDER BY id ASC")
+        rows = cursor.fetchall()
+        conn.close()
+    except Exception as e:
+        return {"valid": False, "error": str(e), "checked": 0}
+
+    prev = ""
+    checked = 0
+    legacy = 0
+    for r in rows:
+        # Rows written before the hash-chain feature have no entry_hash; they
+        # predate integrity tracking and are skipped (unverifiable legacy).
+        if not r["entry_hash"]:
+            legacy += 1
+            continue
+        canonical = _canonical_audit(
+            r["timestamp"], r["action_id"], r["tool"], r["risk_level"], r["decision"],
+            r["confirmation_mode"], r["target"], r["params"], r["reason"], r["rollback_hint"],
+            r["source_channel"], r["sender_id"],
+        )
+        expected = _entry_hash(prev, canonical)
+        if (r["prev_hash"] or "") != prev or r["entry_hash"] != expected:
+            return {"valid": False, "checked": checked, "total": len(rows),
+                    "legacy_skipped": legacy, "broken_at": r["action_id"]}
+        prev = r["entry_hash"]
+        checked += 1
+    return {"valid": True, "checked": checked, "total": len(rows), "legacy_skipped": legacy}
 
 def update_audit_log_status(action_id: str, executed_status: str) -> bool:
     try:
@@ -234,6 +321,91 @@ def get_audit_logs() -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch audit logs: {e}")
     return logs
 
+def _normalize_goal(goal: str) -> str:
+    """Normalize a goal for cache lookup (lowercase, strip diacritics/space)."""
+    try:
+        from policy.action_policy import normalize_label
+        g = normalize_label(goal or "")
+    except Exception:
+        g = (goal or "").lower()
+    return " ".join(g.split())
+
+
+def get_task_plan(goal: str) -> Optional[List[Dict[str, Any]]]:
+    """Return a previously-learned action plan for this goal, or None."""
+    norm = _normalize_goal(goal)
+    if not norm:
+        return None
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT steps FROM task_plans WHERE goal_norm = ?", (norm,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row[0]:
+            steps = json.loads(row[0])
+            if isinstance(steps, list) and steps:
+                return steps
+    except Exception as e:
+        logger.error(f"Failed to read task plan: {e}")
+    return None
+
+
+def save_task_plan(goal: str, steps: List[Dict[str, Any]]) -> bool:
+    """Persist a successful goal -> action plan (procedural memory). Bumps a
+    usage counter so the system learns which tasks recur."""
+    norm = _normalize_goal(goal)
+    if not norm or not steps:
+        return False
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT uses FROM task_plans WHERE goal_norm = ?", (norm,))
+        row = cursor.fetchone()
+        uses = (row[0] + 1) if row and row[0] else 1
+        cursor.execute(
+            "INSERT OR REPLACE INTO task_plans (goal_norm, goal_original, steps, uses, last_used) VALUES (?, ?, ?, ?, ?)",
+            (norm, goal, json.dumps(steps, ensure_ascii=False), uses, time.time())
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save task plan: {e}")
+        return False
+
+
+def get_all_task_plans() -> List[Dict[str, Any]]:
+    """All learned task plans (for the markdown memory digest)."""
+    out = []
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT goal_original, goal_norm, uses, last_used FROM task_plans ORDER BY uses DESC, last_used DESC")
+        for r in cursor.fetchall():
+            out.append({"goal": r["goal_original"] or r["goal_norm"], "uses": r["uses"] or 1, "last_used": r["last_used"] or 0})
+        conn.close()
+    except Exception as e:
+        logger.error(f"Failed to read task plans: {e}")
+    return out
+
+
+def delete_task_plan(goal: str) -> bool:
+    """Drop a learned plan (e.g. when it turned out stale on replay)."""
+    norm = _normalize_goal(goal)
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM task_plans WHERE goal_norm = ?", (norm,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete task plan: {e}")
+        return False
+
+
 def get_remote_sender(sender_identity: str) -> Optional[Dict[str, Any]]:
     try:
         conn = sqlite3.connect(SQLITE_PATH)
@@ -257,10 +429,22 @@ def get_remote_sender(sender_identity: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Failed to get remote sender: {e}")
     return None
 
+def delete_remote_sender(sender_identity: str) -> bool:
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.cursor().execute("DELETE FROM remote_senders WHERE sender_identity = ?", (sender_identity,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete remote sender: {e}")
+        return False
+
+
 def verify_remote_sender_pin(sender_identity: str, pin: str) -> bool:
     sender = get_remote_sender(sender_identity)
     if sender:
-        return sender["pin"] == pin
+        return hmac.compare_digest(str(sender["pin"]), str(pin))
     return False
 
 def add_remote_sender(sender_identity: str, name: str, enabled: bool, auth_level: str, can_create_task: bool, can_approve_high_risk: bool, requires_pin_for_high_risk: bool, pin: str) -> bool:

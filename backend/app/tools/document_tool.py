@@ -93,12 +93,12 @@ def summarize_text(filepath: str) -> Dict[str, Any]:
         
     content = res["content"]
     if not content:
-        return {"success": True, "summary": "Tệp tin trống."}
-        
+        return {"success": True, "summary": "The file is empty."}
+
     # Simple rule-based summarization for Phase 2 local logic
     lines = [line.strip() for line in content.split("\n") if line.strip()]
     if not lines:
-        return {"success": True, "summary": "Tệp tin không có nội dung văn bản hợp lệ."}
+        return {"success": True, "summary": "The file has no valid text content."}
         
     # Take first 3 lines and total word count
     words = content.split()
@@ -106,10 +106,10 @@ def summarize_text(filepath: str) -> Dict[str, Any]:
     summary_preview = "\n".join(lines[:3])
     
     summary_text = (
-        f"Bản tóm tắt tệp tin:\n"
-        f"- Tổng số từ: {total_words}\n"
-        f"- Tổng số dòng: {len(lines)}\n"
-        f"- Nội dung chính sơ lược:\n{summary_preview}"
+        f"File summary:\n"
+        f"- Total words: {total_words}\n"
+        f"- Total lines: {len(lines)}\n"
+        f"- Main content preview:\n{summary_preview}"
     )
     
     return {"success": True, "summary": summary_text}

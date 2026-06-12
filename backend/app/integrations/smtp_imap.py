@@ -8,12 +8,14 @@ from email.mime.base import MIMEBase
 from email import encoders
 from typing import List, Dict, Any
 
+from core import paths
+
 logger = logging.getLogger("integrations.smtp_imap")
 
-# Resolve workspace folders
+# WORKSPACE_DIR (repo root) used for user-visible .eml output; settings in brain.
 INTEGRATIONS_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(INTEGRATIONS_DIR)))
-SETTINGS_PATH = os.path.join(WORKSPACE_DIR, "config", "email_settings.json")
+SETTINGS_PATH = paths.config_file("email_settings.json")
 
 def load_email_settings() -> Dict[str, Any]:
     """Loads email settings from config."""
@@ -78,7 +80,7 @@ def send_email_smtp(to_email: str, subject: str, body: str, attachments: List[st
             return {
                 "success": True,
                 "mode": "mock",
-                "message": f"Đã lưu email nháp (giả lập SMTP) thành công vào: {eml_filename}",
+                "message": f"Draft email (mock SMTP) saved successfully to: {eml_filename}",
                 "eml_path": eml_path,
                 "attachments": attached_files
             }
@@ -90,11 +92,13 @@ def send_email_smtp(to_email: str, subject: str, body: str, attachments: List[st
         smtp_host = settings.get("smtp_host")
         smtp_port = settings.get("smtp_port", 587)
         smtp_user = settings.get("smtp_user")
-        
-        # Read SMTP password from environment variables (No hardcoded passwords!)
-        smtp_password = os.environ.get("CONTROLPC_SMTP_PASSWORD")
+
+        # Read SMTP password from the OS keyring (Windows Credential Manager),
+        # falling back to the CONTROLPC_SMTP_PASSWORD env var. Never plaintext config.
+        from core import secrets as app_secrets
+        smtp_password = app_secrets.get_secret("smtp_password")
         if not smtp_password:
-            return {"success": False, "error": "SMTP password not configured in environment variable 'CONTROLPC_SMTP_PASSWORD'."}
+            return {"success": False, "error": "SMTP password is not configured. Set it in Settings → Security (Credential Manager) or via the CONTROLPC_SMTP_PASSWORD environment variable."}
             
         try:
             logger.info(f"Connecting to SMTP server {smtp_host}:{smtp_port}...")
@@ -108,7 +112,7 @@ def send_email_smtp(to_email: str, subject: str, body: str, attachments: List[st
             return {
                 "success": True,
                 "mode": "live",
-                "message": f"Đã gửi email thật thành công đến {to_email}",
+                "message": f"Email sent successfully to {to_email}",
                 "attachments": attached_files
             }
         except Exception as e:

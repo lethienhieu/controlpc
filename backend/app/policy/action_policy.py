@@ -33,7 +33,7 @@ class ActionPolicy:
         # Initialize default policies or configs if needed
         pass
 
-    def evaluate_action(self, tool: str, params: Dict[str, Any], intent: str = "general", reason: str = "") -> Dict[str, Any]:
+    def evaluate_action(self, tool: str, params: Dict[str, Any], intent: str = "general", reason: str = "", safety_confirmation: bool = True) -> Dict[str, Any]:
         """
         Evaluates an action proposal against safety policy rules.
         Returns a dict conforming to the Action Schema:
@@ -61,9 +61,9 @@ class ActionPolicy:
         
         # Default structures
         target = {}
-        preview_title = f"Thực hiện: {tool}"
-        preview_summary = f"Chạy công cụ {tool} với các tham số: {params}"
-        rollback_hint = "Không thể thu hồi một cách dễ dàng."
+        preview_title = f"Execute: {tool}"
+        preview_summary = f"Run the {tool} tool with parameters: {params}"
+        rollback_hint = "This cannot be easily undone."
         
         decision = "allowed"
         confirmation_mode = "none"
@@ -88,9 +88,9 @@ class ActionPolicy:
         if risk_level == "blocked":
             return self._build_result(
                 action_id, tool, intent, risk_level, "blocked", "manual_only",
-                target, params, reason, "Bị chặn bởi hệ thống bảo mật",
-                "Hành động này nằm ngoài phạm vi an toàn và bị cấm thực thi.",
-                "Hành động không được phép chạy."
+                target, params, reason, "Blocked by the security system",
+                "This action falls outside the safety scope and is prohibited from execution.",
+                "This action is not permitted to run."
             )
 
         # 3. Check specific tool permissions
@@ -102,9 +102,9 @@ class ActionPolicy:
             if filepath and not permissions.check_file_read_permission(filepath):
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Truy cập file bị chặn",
-                    f"Không có quyền đọc file tại đường dẫn: {filepath}",
-                    "Hành động không được phép chạy."
+                    target, params, reason, "File access blocked",
+                    f"No permission to read the file at path: {filepath}",
+                    "This action is not permitted to run."
                 )
                 
         # File Write check
@@ -113,9 +113,9 @@ class ActionPolicy:
             if destpath and not permissions.check_file_write_permission(destpath):
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Tạo/Ghi file bị chặn",
-                    f"Không có quyền ghi hoặc định dạng đuôi file không hợp lệ tại: {destpath}",
-                    "Hành động không được phép chạy."
+                    target, params, reason, "File create/write blocked",
+                    f"No write permission, or invalid file extension at: {destpath}",
+                    "This action is not permitted to run."
                 )
 
         # App launch checks
@@ -126,17 +126,34 @@ class ActionPolicy:
             if launch_policy == "block":
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Khởi chạy ứng dụng bị chặn",
-                    f"Ứng dụng '{app_name}' nằm trong danh mục cấm chạy.",
-                    "Hành động không được phép chạy."
+                    target, params, reason, "Application launch blocked",
+                    f"The application '{app_name}' is in the blocked-launch list.",
+                    "This action is not permitted to run."
                 )
             elif launch_policy == "confirm":
                 decision = "requires_confirmation"
                 confirmation_mode = "confirm_once"
-                preview_title = f"Mở ứng dụng '{app_name}'"
-                preview_summary = f"Yêu cầu khởi chạy ứng dụng '{app_name}' ngoài allowlist chính thức."
-                rollback_hint = "Có thể tắt ứng dụng thủ công."
+                preview_title = f"Open application '{app_name}'"
+                preview_summary = f"Request to launch the application '{app_name}' outside the official allowlist."
+                rollback_hint = "The application can be closed manually."
                 
+        # Shell command: must be allowlisted, always high-risk confirmation.
+        if tool_lower == "shell.run":
+            shell_kind = params.get("shell", "powershell")
+            command = params.get("command", "")
+            if not permissions.check_cli_command_permission(shell_kind, command):
+                return self._build_result(
+                    action_id, tool, intent, "blocked", "blocked", "manual_only",
+                    target, params, reason, "Shell command blocked",
+                    f"The command '{command}' is not in the allowlist for '{shell_kind}'.",
+                    "Add the command to config/permissions.json if it is truly needed."
+                )
+            decision = "requires_confirmation"
+            confirmation_mode = "confirm_final"
+            preview_title = f"Run {shell_kind} command"
+            preview_summary = f"Execute (allowlisted): {command}"
+            rollback_hint = "Shell commands may not be reversible."
+
         # Click Coordination Safety
         if tool_lower == "click":
             safety = permissions.get_safety_settings()
@@ -145,16 +162,16 @@ class ActionPolicy:
                 # If coordinate click is globally disabled, downgrade or block it
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Click tọa độ bị chặn",
-                    "Click chuột theo tọa độ (coordinate click) hiện đang bị tắt trong cấu hình an toàn.",
-                    "Vui lòng bật click tọa độ trong cài đặt nếu thực sự cần thiết."
+                    target, params, reason, "Coordinate click blocked",
+                    "Coordinate-based mouse clicks are currently disabled in the safety configuration.",
+                    "Please enable coordinate clicking in settings if it is truly necessary."
                 )
             else:
                 decision = "requires_confirmation"
                 confirmation_mode = "confirm_final"
-                preview_title = "Click chuột theo tọa độ"
-                preview_summary = f"Nhấp chuột tại tọa độ X={params.get('x')}, Y={params.get('y')} trên màn hình."
-                rollback_hint = "Hành động nhấp chuột không thể thu hồi."
+                preview_title = "Coordinate-based mouse click"
+                preview_summary = f"Click the mouse at coordinates X={params.get('x')}, Y={params.get('y')} on the screen."
+                rollback_hint = "A mouse click action cannot be undone."
 
         # Email / Message send checks
         if tool_lower in ["email.send", "message.send"]:
@@ -164,24 +181,24 @@ class ActionPolicy:
             if send_policy == "blocked":
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Gửi tin bị chặn",
-                    f"Liên hệ '{recipient}' nằm trong danh sách cấm gửi tự động.",
-                    "Hành động không được phép chạy."
+                    target, params, reason, "Message send blocked",
+                    f"The contact '{recipient}' is in the list barred from automatic sending.",
+                    "This action is not permitted to run."
                 )
             elif send_policy == "draft_only":
                 # If contact only allows drafting, block the send tool call
                 return self._build_result(
                     action_id, tool, intent, "blocked", "blocked", "manual_only",
-                    target, params, reason, "Gửi tin bị chặn (Chỉ cho phép soạn nháp)",
-                    f"Liên hệ '{recipient}' chỉ chấp nhận tạo bản nháp (draft). Không được gửi trực tiếp.",
-                    "Thay thế bằng hành động tạo bản nháp."
+                    target, params, reason, "Message send blocked (drafts only allowed)",
+                    f"The contact '{recipient}' only accepts draft creation. Direct sending is not allowed.",
+                    "Replace with a draft-creation action instead."
                 )
             elif send_policy == "confirm_before_send":
                 decision = "requires_confirmation"
                 confirmation_mode = "confirm_final"
-                preview_title = "Gửi thông tin / Email thật"
-                preview_summary = f"Gửi nội dung đến '{recipient}'. Hành động này sẽ gửi dữ liệu ra bên ngoài."
-                rollback_hint = "Không thể thu hồi sau khi đã gửi email/tin nhắn."
+                preview_title = "Send real message / email"
+                preview_summary = f"Send content to '{recipient}'. This action will send data externally."
+                rollback_hint = "Cannot be undone once the email/message has been sent."
             elif send_policy == "auto_send_allowed":
                 # Allowed to send automatically without confirmation
                 decision = "allowed"
@@ -201,9 +218,9 @@ class ActionPolicy:
             risk_level = "high"
             decision = "requires_confirmation"
             confirmation_mode = "confirm_final"
-            preview_title = f"Click nhãn nguy hiểm: {params.get('name') or params.get('auto_id')}"
-            preview_summary = f"Cảnh báo: Nhấp vào nút nhạy cảm/nguy hiểm '{params.get('name') or params.get('auto_id')}'."
-            rollback_hint = "Hành động nhấp chuột không thể thu hồi."
+            preview_title = f"Click dangerous label: {params.get('name') or params.get('auto_id')}"
+            preview_summary = f"Warning: clicking the sensitive/dangerous button '{params.get('name') or params.get('auto_id')}'."
+            rollback_hint = "A mouse click action cannot be undone."
 
         # 4. Fallback based on Risk Level if not explicitly resolved
         if decision == "allowed":
@@ -217,12 +234,29 @@ class ActionPolicy:
                 decision = "allowed"
                 confirmation_mode = "none"
 
-        # Special case: Agent safety settings override
-        # If user turned on global safety confirmation, every non-low and non-finish action requires confirmation
-        if decision == "allowed" and tool_lower not in ["finish", "learn"]:
-            # If default safety is active, upgrade to confirm_once
-            decision = "requires_confirmation"
-            confirmation_mode = "confirm_once"
+        # Permission mode (persisted in safety_settings) decides how aggressively we
+        # ask the user to approve actions. Hard "blocked" results already returned
+        # early above, so the safety rails are never weakened by any mode here.
+        #   "ask"    -> confirm every still-allowed action (safest; default)
+        #   "smart"  -> only the risk-based confirmations (medium/high) stand
+        #   "bypass" -> auto-approve everything that isn't hard-blocked (no prompts)
+        try:
+            mode = permissions.get_safety_settings().get("permission_mode")
+        except Exception:
+            mode = None
+        if not mode:
+            # Back-compat with the old boolean toggle when no mode is persisted.
+            mode = "ask" if safety_confirmation else "smart"
+
+        if mode == "bypass":
+            if decision == "requires_confirmation":
+                decision = "allowed"
+                confirmation_mode = "none"
+        elif mode == "ask":
+            if decision == "allowed" and tool_lower not in ["finish", "learn"]:
+                decision = "requires_confirmation"
+                confirmation_mode = "confirm_once"
+        # mode == "smart": leave the risk-based decision untouched.
 
         return self._build_result(
             action_id, tool, intent, risk_level, decision, confirmation_mode,

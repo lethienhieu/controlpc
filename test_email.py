@@ -16,7 +16,7 @@ def test_recipient_validation():
     res_nam = email_tool.validate_recipient("nam@example.com")
     assert res_nam["success"]
     assert res_nam["is_known_contact"]
-    assert res_nam["contact_info"]["name"] == "Nam GĐ"
+    assert res_nam["contact_info"]["name"] == "Sample Director"
     
     # Valid & unknown contact
     res_unk = email_tool.validate_recipient("stranger@example.com")
@@ -26,21 +26,21 @@ def test_recipient_validation():
     # Invalid email syntax
     res_inv = email_tool.validate_recipient("invalid-email-string")
     assert not res_inv["success"]
-    assert "Định dạng email không hợp lệ" in res_inv["error"]
+    assert "Invalid email format" in res_inv["error"]
     
     print(" - Recipient validation passed!")
 
 def test_draft_creation_and_removal():
     print("[TEST] Testing draft creation and file persistence...")
-    draft_path = "workspace/temp/current_draft.json"
+    draft_path = email_tool.DRAFT_PATH
     
     # Cleanup old draft if any
     if os.path.exists(draft_path):
         os.remove(draft_path)
         
     to = "nam@example.com"
-    subject = "Báo cáo tiến độ CONTROLPC"
-    body = "Xin chào anh Nam,\nTôi đã hoàn thành xong Phase 3 của CONTROLPC."
+    subject = "CONTROLPC progress report"
+    body = "Hello Nam,\nI have finished Phase 3 of CONTROLPC."
     
     res = email_tool.create_draft(to, subject, body)
     assert res["success"]
@@ -59,8 +59,8 @@ def test_draft_creation_and_removal():
 def test_email_sending_mock():
     print("[TEST] Testing email sending with mock SMTP EML generation...")
     to = "nam@example.com"
-    subject = "Báo cáo gửi thử"
-    body = "Đã tích hợp SMTP mock."
+    subject = "Test send report"
+    body = "SMTP mock has been integrated."
     
     # Clean output eml first
     eml_path = "workspace/output/draft_email_nam_at_example.com.eml"
@@ -73,7 +73,7 @@ def test_email_sending_mock():
     assert os.path.exists(eml_path), "EML draft should be saved on mock sending"
     
     # Verify the draft JSON file was removed after successful send
-    draft_path = "workspace/temp/current_draft.json"
+    draft_path = email_tool.DRAFT_PATH
     assert not os.path.exists(draft_path), "Draft file should be cleaned up after successful send"
     
     print(" - Email send mock passed!")
@@ -82,24 +82,24 @@ def test_policy_enforcement():
     print("[TEST] Testing ActionPolicy rules for email sending...")
     policy = ActionPolicy()
     
-    # Gửi email đến Nam GĐ: Nam GĐ có policy là 'confirm_before_send' -> requires_confirmation
+    # Send email to Sample Director (nam@example.com): policy 'confirm_before_send' -> requires_confirmation
     res = policy.evaluate_action("email.send", {
         "recipient": "nam@example.com",
-        "subject": "Báo cáo",
-        "body": "Nội dung"
+        "subject": "Report",
+        "body": "Content"
     })
     assert res["decision"] == "requires_confirmation"
     assert res["confirmation_mode"] == "confirm_final"
     assert "email" in res["target"].values() or "nam@example.com" in res["target"].values()
     
-    # Gửi email đến Hằng HR: Hằng HR có policy là 'draft_only' -> blocked/prevented
+    # Send email to Sample HR (hang@example.com): policy 'draft_only' -> blocked/prevented
     res_hang = policy.evaluate_action("email.send", {
         "recipient": "hang@example.com",
-        "subject": "Báo cáo",
-        "body": "Nội dung"
+        "subject": "Report",
+        "body": "Content"
     })
     assert res_hang["decision"] == "blocked"
-    assert "Chỉ cho phép soạn nháp" in res_hang["preview"]["title"]
+    assert "drafts only allowed" in res_hang["preview"]["title"]
     
     print(" - ActionPolicy checks for email passed!")
 

@@ -3,11 +3,11 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 
+from core import paths
+
 logger = logging.getLogger("integrations.contacts")
 
-INTEGRATIONS_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(INTEGRATIONS_DIR)))
-CONTACTS_PATH = os.path.join(WORKSPACE_DIR, "config", "contacts.json")
+CONTACTS_PATH = paths.config_file("contacts.json")
 
 def load_all_contacts() -> List[Dict[str, Any]]:
     """Loads all contacts from contacts.json."""

@@ -15,7 +15,9 @@ from database import memory
 from integrations import telegram
 from policy import permissions
 
-PERMISSIONS_PATH = os.path.join(BASE_DIR, "config", "permissions.json")
+# Use the ACTIVE permissions path the app actually reads (brain config), not the
+# shipped default under repo /config.
+PERMISSIONS_PATH = permissions.CONFIG_PATH
 
 @contextmanager
 def remote_gateway_setting(enabled: bool):
@@ -85,24 +87,24 @@ def test_telegram_process_commands():
     agent.pending_action = None
     
     # 1. Remote gateway is disabled by default and must reject every sender
-    res = telegram.process_remote_command("telegram", "999999999", "mở notepad")
+    res = telegram.process_remote_command("telegram", "999999999", "open notepad")
     assert not res["success"]
-    assert "Remote Gateway" in res["message"] or "điều khiển từ xa" in res["message"]
+    assert "Remote Gateway" in res["message"] or "remote control" in res["message"]
 
     with remote_gateway_setting(True):
         # 2. Request from unauthorized sender
-        res = telegram.process_remote_command("telegram", "999999999", "mở notepad")
+        res = telegram.process_remote_command("telegram", "999999999", "open notepad")
         assert not res["success"]
-        assert "không được ủy quyền" in res["message"]
-        
+        assert "not authorized" in res["message"]
+
         # 3. Request from disabled sender
-        res = telegram.process_remote_command("telegram", "987654321", "mở notepad")
+        res = telegram.process_remote_command("telegram", "987654321", "open notepad")
         assert not res["success"]
-        assert "bị vô hiệu hóa" in res["message"]
-        
+        assert "disabled" in res["message"]
+
         # 4. Valid request from Owner should create a local task, not call tools directly.
         # With default safety confirmation, even allowlisted Notepad should pause for approval.
-        res = telegram.process_remote_command("telegram", "123456789", "mở notepad")
+        res = telegram.process_remote_command("telegram", "123456789", "open notepad")
         assert res["success"] is True
         assert agent.status in ["waiting_approval", "running", "finished"]
         agent.status = "idle"
@@ -148,13 +150,13 @@ def test_pin_gated_execution():
         # 1. Send incorrect PIN
         res_bad = telegram.process_remote_command("telegram", "123456789", "9999")
         assert not res_bad["success"]
-        assert "PIN không đúng" in res_bad["message"]
+        assert "Incorrect PIN" in res_bad["message"]
         assert agent.status == "waiting_approval"
-        
+
         # 2. Send correct PIN
         res_good = telegram.process_remote_command("telegram", "123456789", "1234")
         assert res_good["success"] is True
-        assert "Phê duyệt thành công" in res_good["message"]
+        assert "Approval successful" in res_good["message"]
         
         # Wait for execution thread to run and task to finish
         time.sleep(1)

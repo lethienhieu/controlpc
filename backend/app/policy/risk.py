@@ -25,7 +25,7 @@ def classify_action_risk(action: str, params: Dict[str, Any]) -> str:
                     return "blocked"
 
     # 2. High Risk Actions: operations that can send out information or delete files
-    if action_lower in ["email.send", "message.send", "file.delete", "cli.run_system_command"]:
+    if action_lower in ["email.send", "message.send", "file.delete", "cli.run_system_command", "shell.run"]:
         return "high"
     
     # Click coordination and general execution is considered high-risk by default, UIA coordinates can be medium

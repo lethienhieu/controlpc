@@ -14,8 +14,9 @@ logger = logging.getLogger("os_control")
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.3  # Slight pause for stability
 
-# Cache path for screen captures
-TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp")
+# Cache path for screen captures (regenerable scratch in the brain's cache dir)
+from core import paths
+TEMP_DIR = paths.screenshots_dir()
 os.makedirs(TEMP_DIR, exist_ok=True)
 SCREENSHOT_PATH = os.path.join(TEMP_DIR, "screenshot.png")
 

@@ -3,31 +3,54 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 
+from core import paths
+
 logger = logging.getLogger("policy.permissions")
 
-# Resolve permissions.json path
+# WORKSPACE_DIR stays the REPO ROOT so the ${WORKSPACE} token in permissions.json
+# keeps resolving user dirs under <repo>/workspace. Active config lives in brain.
 POLICY_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(POLICY_DIR)))
-CONFIG_PATH = os.path.join(WORKSPACE_DIR, "config", "permissions.json")
+CONFIG_PATH = paths.config_file("permissions.json")
 
 _cached_permissions: Optional[Dict[str, Any]] = None
+
+
+def _expand_path_token(p: str) -> str:
+    """Expand portable tokens so permissions.json works on any machine/user.
+    Supports ${WORKSPACE} (repo root) plus environment vars like %USERPROFILE%."""
+    if not isinstance(p, str):
+        return p
+    p = p.replace("${WORKSPACE}", WORKSPACE_DIR).replace("%WORKSPACE%", WORKSPACE_DIR)
+    return os.path.expandvars(p)  # resolves %USERPROFILE%, %APPDATA%, etc.
+
+
+def _expand_dir_lists(config: Dict[str, Any]) -> Dict[str, Any]:
+    file_perm = config.get("file_permissions")
+    if isinstance(file_perm, dict):
+        for key in ("allowed_read_dirs", "allowed_write_dirs", "blocked_dirs"):
+            if isinstance(file_perm.get(key), list):
+                file_perm[key] = [_expand_path_token(d) for d in file_perm[key]]
+    return config
+
 
 def load_permissions() -> Dict[str, Any]:
     """
     Loads permission configuration from config/permissions.json.
-    Caches the results for subsequent calls.
+    Path tokens (${WORKSPACE}, %USERPROFILE%, ...) are expanded so the config is
+    portable across machines and users. Caches the result for subsequent calls.
     """
     global _cached_permissions
     if _cached_permissions is not None:
         return _cached_permissions
-        
+
     if not os.path.exists(CONFIG_PATH):
         logger.warning(f"Permissions config not found at {CONFIG_PATH}. Using empty defaults.")
         return {}
-        
+
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            _cached_permissions = json.load(f)
+            _cached_permissions = _expand_dir_lists(json.load(f))
             logger.info("Permissions config loaded successfully.")
             return _cached_permissions
     except Exception as e:
@@ -123,7 +146,13 @@ def check_cli_command_permission(app_name: str, command: str) -> bool:
     """Checks if a CLI command is in the allowlist for the app."""
     config = load_permissions()
     app_perms = config.get("app_permissions", {})
-    
+
+    # Reject shell metacharacters outright. Otherwise an allowlisted prefix such as
+    # "dir" would also approve "dir & del ..." or "Get-Process; Invoke-Expression ..."
+    # because the allowlist is a startswith() prefix match.
+    if any(ch in command for ch in ("&", "|", ";", "`", "$", "(", ")", "<", ">", "\n", "\r")):
+        return False
+
     app_name_lower = app_name.lower().strip()
     if app_name_lower in app_perms:
         allowed_cmds = app_perms[app_name_lower].get("allowed_commands", [])

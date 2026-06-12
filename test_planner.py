@@ -44,7 +44,7 @@ def test_pydantic_validation():
     
     # 1. Valid data
     valid_data = {
-        "reasoning": "Mở ứng dụng Notepad qua CLI",
+        "reasoning": "Open the Notepad application via CLI",
         "action": "open",
         "params": {"app_name": "notepad"}
     }
@@ -54,7 +54,7 @@ def test_pydantic_validation():
     
     # 2. Invalid Action should raise ValidationError
     invalid_data = {
-        "reasoning": "Mở ứng dụng Notepad",
+        "reasoning": "Open the Notepad application",
         "action": "invalid_action_name",
         "params": {}
     }

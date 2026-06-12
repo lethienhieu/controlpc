@@ -1,24 +1,23 @@
 {
   "file_permissions": {
     "allowed_read_dirs": [
-      "C:\\1 CODE\\CONTROLPC\\workspace\\input",
-      "C:\\1 CODE\\CONTROLPC\\workspace\\output",
-      "C:\\Users\\admin\\Desktop",
-      "C:\\Users\\admin\\Documents",
-      "C:\\Users\\admin\\Downloads"
+      "${WORKSPACE}\\workspace\\input",
+      "${WORKSPACE}\\workspace\\output",
+      "%USERPROFILE%\\Desktop",
+      "%USERPROFILE%\\Documents",
+      "%USERPROFILE%\\Downloads"
     ],
     "allowed_write_dirs": [
-      "C:\\1 CODE\\CONTROLPC\\workspace\\output",
-      "C:\\1 CODE\\CONTROLPC\\workspace\\temp",
-      "C:\\Users\\admin\\Desktop",
-      "C:\\Users\\admin\\Documents"
+      "${WORKSPACE}\\workspace\\output",
+      "${WORKSPACE}\\workspace\\temp",
+      "%USERPROFILE%\\Desktop",
+      "%USERPROFILE%\\Documents"
     ],
     "blocked_dirs": [
       "C:\\Windows",
       "C:\\Program Files",
       "C:\\Program Files (x86)",
-      "C:\\Users\\admin\\AppData",
-      "C:\\Users\\admin\\.gemini"
+      "%USERPROFILE%\\AppData"
     ],
     "allowed_extensions": [
       ".docx",
@@ -63,11 +62,11 @@
   },
   "contact_permissions": {
     "nam@example.com": {
-      "name": "Nam GĐ",
+      "name": "Sample Director",
       "policy": "confirm_before_send"
     },
     "hang@example.com": {
-      "name": "Hằng HR",
+      "name": "Sample HR",
       "policy": "draft_only"
     },
     "default": {
@@ -92,7 +91,6 @@
     "coordinate_click_enabled": false,
     "remote_gateway_enabled": false,
     "auto_send_messages": false,
-    "default_action_policy": "confirm_once",
-    "test_flag": "hello_world"
+    "default_action_policy": "confirm_once"
   }
 }

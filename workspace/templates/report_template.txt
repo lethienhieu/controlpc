@@ -1,13 +1,13 @@
-BÁO CÁO CÔNG VIỆC HÀNG NGÀY
-Ngày: {date}
-Người báo cáo: {author}
+DAILY WORK REPORT
+Date: {date}
+Reported by: {author}
 ----------------------------------------
 
-1. Kết quả công việc hôm nay:
+1. Today's work results:
 {work_done}
 
-2. Khó khăn / Vướng mắc:
+2. Difficulties / Blockers:
 {issues}
 
-3. Kế hoạch ngày mai:
+3. Plan for tomorrow:
 {next_plan}
