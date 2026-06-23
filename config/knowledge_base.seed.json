@@ -2,7 +2,16 @@
   "apps": {
     "notepad": "C:\\Windows\\System32\\notepad.exe",
     "calc": "C:\\Windows\\System32\\calc.exe",
-    "cmd": "C:\\Windows\\System32\\cmd.exe"
+    "calculator": "C:\\Windows\\System32\\calc.exe",
+    "cmd": "C:\\Windows\\System32\\cmd.exe",
+    "command prompt": "C:\\Windows\\System32\\cmd.exe",
+    "powershell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "paint": "C:\\Windows\\System32\\mspaint.exe",
+    "mspaint": "C:\\Windows\\System32\\mspaint.exe",
+    "explorer": "C:\\Windows\\explorer.exe",
+    "file explorer": "C:\\Windows\\explorer.exe",
+    "task manager": "C:\\Windows\\System32\\Taskmgr.exe",
+    "control panel": "C:\\Windows\\System32\\control.exe"
   },
   "custom_triggers": {}
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Square, Settings, Terminal, Tv, Cpu,
-  Check, X, Send, Activity
+  Check, X, Send
 } from "lucide-react";
 import "./App.css";
 
@@ -71,7 +71,6 @@ function App() {
   const [smtpPwd, setSmtpPwd] = useState("");
   const [tgToken, setTgToken] = useState("");
   const [secretMsg, setSecretMsg] = useState("");
-  const [modelPathInput, setModelPathInput] = useState("");
   const [modelMsg, setModelMsg] = useState("");
   const [memoryData, setMemoryData] = useState(null);
   const [availableModels, setAvailableModels] = useState([]);

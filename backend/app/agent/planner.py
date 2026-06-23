@@ -137,7 +137,7 @@ class ReActPlanner:
                 try:
                     content = self.llm.generate(
                         prompt=prompt,
-                        max_tokens=256,
+                        max_tokens=160,  # action JSON is small; brief reasoning keeps latency low
                         temperature=0.1 if attempt == 0 else 0.0,
                         json_schema=ACTION_JSON_SCHEMA,
                     ).strip()

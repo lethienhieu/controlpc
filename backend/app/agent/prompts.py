@@ -64,7 +64,7 @@ ADVANCED TOOLS (use "action" set to exactly the tool name below when you need fi
 Analyze the history of steps taken so far: {history}
 Respond with ONLY a single JSON object of the following shape (no markdown code fences, no text outside the JSON):
 {{
-  "reasoning": "Why you chose this action, and how you prefer CLI/shortcut/UIA solutions",
+  "reasoning": "ONE short sentence on why this action (keep it brief — do not write a paragraph)",
   "action": "one of the OS actions (open, hotkey, press, click_uia, click, type, learn, finish) OR a tool name (e.g. email.create_draft, file.search, document.create_docx)",
   "params": {{
      // parameters matching the function you chose (e.g. app_name, keys, key, window_title_re, auto_id, name, control_type, x, y, click_type, text, value, type, message)
