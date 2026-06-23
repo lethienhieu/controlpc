@@ -66,7 +66,7 @@ attempt=1
 while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   log "================ attempt $attempt / $MAX_ATTEMPTS ================"
   if run_gates; then
-    log "${c_grn}✅ SUCCESS — all gates passed on attempt $attempt${c_off}"
+    printf "${c_grn}[loop %s] ✅ SUCCESS — all gates passed on attempt %s${c_off}\n" "$(date +%H:%M:%S)" "$attempt"
     exit 0
   fi
   log "attempt $attempt failed — retrying in 2s (transient/cold issues self-heal; real bugs need a fix)"
@@ -74,5 +74,5 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   sleep 2
 done
 
-log "${c_red}❌ FAILURE — gates still red after $MAX_ATTEMPTS attempts. Fix the reported gate, then re-run.${c_off}"
+printf "${c_red}[loop %s] ❌ FAILURE — gates still red after %s attempts. Fix the reported gate, then re-run.${c_off}\n" "$(date +%H:%M:%S)" "$MAX_ATTEMPTS"
 exit 1
